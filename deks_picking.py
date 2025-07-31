@@ -1,122 +1,125 @@
+import streamlit as st
 import fitz  # PyMuPDF
 import re
-import streamlit as st
 import pandas as pd
-from io import BytesIO
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
+import tempfile
+from fpdf import FPDF
 
-# Set up Streamlit page
-st.set_page_config(page_title="📦 PICK Ticket Extractor", layout="wide")
-st.title("📄 PICK Ticket PDF Extractor")
+# Custom sort list
+custom_pick_order = ['876', '660', '649', '701', '500']  # <-- Replace or extend this as needed
 
-# Define custom PICK order (Hardcoded)
-custom_pick_order = [876, 660, 649, 701, 500]  # <-- Replace this with your preferred order
+st.set_page_config(page_title="Deks Industries", layout="wide")
 
-# Function to parse PDF and extract PICK entries
-def parse_pdf(file):
-    doc = fitz.open(stream=file.read(), filetype="pdf")
+# Header with logo
+col1, col2 = st.columns([1, 6])
+with col1:
+    st.image("https://d1hbpr09pwz0sk.cloudfront.net/logo_url/deks-industries-australasia-405aec84", width=80)
+with col2:
+    st.title("📄 Picking Ticket Sorter")
+
+uploaded_file = st.file_uploader("Upload your PICKING TICKET PDF", type="pdf")
+
+# Sorting method selection
+sort_option = st.radio("Choose Sorting Method:", ("Sort by PICK (Ascending)", "Sort by Custom PICK Order"))
+
+if uploaded_file:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+        tmp_file.write(uploaded_file.read())
+        pdf_path = tmp_file.name
+
+    doc = fitz.open(pdf_path)
     lines = []
     for page in doc:
         lines += page.get_text().splitlines()
 
     entries = []
-    i = 0
+    part_number_pattern = re.compile(r'^[A-Z0-9\-/]+$')
 
-    while i < len(lines):
-        if lines[i].strip() == "PICK":
-            try:
-                pick_number = lines[i + 1].strip()
-                part_no = lines[i + 2].strip()
-                next_line = lines[i + 3].strip()
+    for i in range(6, len(lines)):
+        if lines[i].strip() == "EA":
+            committed_qty = lines[i + 2].strip() if i + 2 < len(lines) else ""
 
-                if next_line == "EA":
-                    description = ""
-                    ea_index = i + 3
-                else:
-                    next_next_line = lines[i + 4].strip()
-                    if next_next_line == "EA":
-                        description = next_line
-                        ea_index = i + 4
-                    else:
-                        description = f"{next_line} {next_next_line}"
-                        ea_index = i + 5
+            part_number = ""
+            part_candidate_1 = lines[i - 2].strip()
+            part_candidate_2 = lines[i - 3].strip()
 
-                unit = lines[ea_index].strip()
-                qty_ordered = int(lines[ea_index + 1].strip())
-                qty_committed = int(lines[ea_index + 2].strip())
-                qty_bo = int(lines[ea_index + 3].strip())
+            if part_number_pattern.match(part_candidate_1):
+                part_number = part_candidate_1
+            elif part_number_pattern.match(part_candidate_2):
+                part_number = part_candidate_2
 
+            bin_value = ""
+            for j in range(i - 1, i - 10, -1):
+                if "PICK" in lines[j]:
+                    pick_line = lines[j].strip()
+                    if pick_line.startswith("PICK ") and len(pick_line.split()) > 1:
+                        bin_text = pick_line.split(" ", 1)[1]
+                        bin_value = bin_text.split(',')[0].split()[0]
+                    elif pick_line.strip() == "PICK" and j + 1 < len(lines):
+                        bin_line = lines[j + 1].strip()
+                        bin_value = bin_line.split(',')[0].split()[0]
+                    elif pick_line.startswith("PICK") and len(pick_line) > 4 and j + 1 < len(lines):
+                        pick_suffix = pick_line[4:].strip()
+                        next_line = lines[j + 1].strip()
+                        bin_value = (pick_suffix + next_line).split(',')[0].split()[0]
+                    break
+
+            if bin_value and part_number:
                 entries.append({
-                    "PICK": pick_number,
-                    "Part #": part_no,
-                    "Description": description.strip(),
-                    "Qty Ordered": qty_ordered,
-                    "Qty Committed": qty_committed,
-                    "Qty B/O": qty_bo
+                    "PICK": bin_value,
+                    "Part #": part_number,
+                    "Qty Committed": committed_qty
                 })
 
-                i = ea_index + 4
-            except Exception as e:
-                i += 1
-        else:
-            i += 1
+    def sort_key(entry):
+        try:
+            return int(entry["PICK"])
+        except:
+            return entry["PICK"]
 
-    return entries  # Don't sort here; sorting is handled after user choice
+    def custom_sort_key(entry):
+        try:
+            return custom_pick_order.index(entry["PICK"])
+        except:
+            return float('inf')
 
-# Function to create downloadable PDF output
-def create_pdf(data):
-    buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-    width, height = A4
+    if sort_option == "Sort by PICK (Ascending)":
+        sorted_entries = sorted(entries, key=sort_key)
+    else:
+        sorted_entries = sorted(entries, key=custom_sort_key)
 
-    y = height - 40
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(40, y, "📦 Sorted PICK Entries")
-    y -= 30
-
-    c.setFont("Helvetica", 10)
-    for entry in data:
-        text = (f"PICK {entry['PICK']} | Part #: {entry['Part #']} | "
-                f"Description: {entry['Description']} | "
-                f"Qty: {entry['Qty Ordered']} / {entry['Qty Committed']} / {entry['Qty B/O']}")
-        c.drawString(40, y, text)
-        y -= 18
-        if y < 50:
-            c.showPage()
-            y = height - 40
-            c.setFont("Helvetica", 10)
-
-    c.save()
-    buffer.seek(0)
-    return buffer
-
-# Add sorting option
-sort_option = st.radio(
-    "Choose Sorting Method:",
-    ("Sort by PICK (Ascending)", "Sort by Custom PICK Order"),
-    horizontal=True
-)
-
-# File uploader
-uploaded_file = st.file_uploader("📄 Upload your PICKING TICKET PDF", type="pdf")
-
-if uploaded_file:
-    with st.spinner("Processing..."):
-        data = parse_pdf(uploaded_file)
-
-    if data:
-        if sort_option == "Sort by PICK (Ascending)":
-            sorted_data = sorted(data, key=lambda x: int(re.match(r'\d+', x["PICK"]).group()))
-        else:
-            pick_order_map = {str(pick): idx for idx, pick in enumerate(custom_pick_order)}
-            sorted_data = sorted(data, key=lambda x: pick_order_map.get(x["PICK"], float('inf')))
-
-        df = pd.DataFrame(sorted_data)
-        st.success("✅ Extracted and sorted successfully!")
+    if sorted_entries:
+        df = pd.DataFrame(sorted_entries)
+        st.success("Extracted and sorted successfully!")
         st.dataframe(df, use_container_width=True)
 
-        pdf_buffer = create_pdf(sorted_data)
-        st.download_button("⬇️ Download Results as PDF", pdf_buffer, file_name="sorted_pick_entries.pdf", mime="application/pdf")
+        class PDFTable(FPDF):
+            def header(self):
+                self.set_font("Arial", "B", 12)
+                self.cell(0, 10, "Pick Ticket Summary", 0, 1, "C")
+
+            def table(self, data):
+                self.set_font("Arial", "B", 10)
+                col_widths = [30, 80, 40]
+                headers = ["PICK", "Part #", "Qty Committed"]
+                for i, header in enumerate(headers):
+                    self.cell(col_widths[i], 10, header, border=1)
+                self.ln()
+                self.set_font("Arial", "", 10)
+                for _, row in data.iterrows():
+                    self.cell(col_widths[0], 10, str(row["PICK"]), border=1)
+                    self.cell(col_widths[1], 10, str(row["Part #"]), border=1)
+                    self.cell(col_widths[2], 10, str(row["Qty Committed"]), border=1)
+                    self.ln()
+
+        pdf = PDFTable()
+        pdf.add_page()
+        pdf.table(df)
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmpfile:
+            pdf.output(tmpfile.name)
+            with open(tmpfile.name, "rb") as f:
+                st.download_button("📥 Download Results as PDF", f.read(), file_name="pick_ticket_summary.pdf", mime="application/pdf")
+
     else:
-        st.warning("⚠️ No valid PICK entries found.")
+        st.warning("No valid entries found in the PDF.")
