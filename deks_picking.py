@@ -46,7 +46,7 @@ with col2:
 uploaded_file = st.file_uploader("Upload your PICKING TICKET PDF", type="pdf")
 
 # Sorting method selection
-sort_option = st.radio("Choose Sorting Method:", ("Sort by PICK (Ascending)", "Sort by Custom PICK (Model I)"))
+sort_option = st.radio("Choose Sorting Method:", ("Sort by Ascending", "Sort by Model I"))
 
 if uploaded_file:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
@@ -109,14 +109,14 @@ if uploaded_file:
         except:
             return float('inf')
 
-    if sort_option == "Sort by PICK (Ascending)":
+    if sort_option == "Sort by Ascending":
         sorted_entries = sorted(entries, key=sort_key)
     else:
         sorted_entries = sorted(entries, key=custom_sort_key)
 
     if sorted_entries:
         df = pd.DataFrame(sorted_entries)
-        st.success("Extracted and sorted successfully!")
+        st.success("Sorted successfully!")
         st.dataframe(df, use_container_width=True)
 
         class PDFTable(FPDF):
@@ -149,6 +149,7 @@ if uploaded_file:
 
     else:
         st.warning("No valid entries found in the PDF.")
+
 
 
 
