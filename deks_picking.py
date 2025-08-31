@@ -4,6 +4,7 @@ import re
 import pandas as pd
 import tempfile
 from fpdf import FPDF
+import types
 
 # Custom sort list
 custom_pick_order = [
@@ -79,7 +80,13 @@ if uploaded_file:
     lines = []
     for page in doc:
         lines += page.get_text().splitlines()
-
+        
+    # Extract Order Number from the document text
+    full_text = "\n".join(lines) 
+    m = re.search(r"Order\s*Number\s*:\s*([A-Za-z0-9\-_/]+)", full_text, re.IGNORECASE)  
+    order_number = m.group(1).strip() if m else "UNKNOWN"  
+    st.info(f"**Order Number:** {order_number}") 
+    
     entries = []
     part_number_pattern = re.compile(r'^[A-Z0-9\-/]+$')
 
@@ -169,6 +176,18 @@ if uploaded_file:
                     self.ln()
 
         pdf = PDFTable()
+
+        # ADDED: Override header to include Order Number, without changing the class definition
+        def custom_header(self):
+            self.set_font("Arial", "B", 12)
+            title = "Picking Ticket Summary"
+            if getattr(self, "_order_number", None):
+                title += f" – Order {self._order_number}"
+            self.cell(0, 10, title, 0, 1, "C")
+        pdf._order_number = order_number  # ADDED
+        pdf.header = types.MethodType(custom_header, pdf)  # ADDED
+
+        
         pdf.add_page()
         pdf.table(df)
 
@@ -179,6 +198,7 @@ if uploaded_file:
 
     else:
         st.warning("No valid entries found in the PDF.")
+
 
 
 
