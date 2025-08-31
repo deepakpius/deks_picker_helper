@@ -172,6 +172,8 @@ if uploaded_file:
 
             def table(self, data):
                 self.set_font("Arial", "B", 10)
+                self.set_fill_color(33, 150, 243)   # blue header background (change as you like)
+                self.set_text_color(255, 255, 255)  # white header text
                 col_widths = [30, 80, 40]
                 headers = ["PICK", "Part #", "Qty Committed"]
                 for i, header in enumerate(headers):
@@ -206,3 +208,4 @@ if uploaded_file:
 
     else:
         st.warning("No valid entries found in the PDF.")
+
