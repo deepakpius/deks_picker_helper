@@ -140,9 +140,9 @@ if uploaded_file:
     if sort_option == "Sort by Ascending":
         sorted_entries = sorted(entries, key=sort_key)
     elif sort_option == "Sort by Model II":
-        sorted_entries = sorted(entries, key=sort_key)
-    else:
         sorted_entries = sorted(entries, key=custom_sort_key2)
+    else:
+        sorted_entries = sorted(entries, key=custom_sort_key)
 
     if sorted_entries:
         df = pd.DataFrame(sorted_entries)
@@ -179,6 +179,7 @@ if uploaded_file:
 
     else:
         st.warning("No valid entries found in the PDF.")
+
 
 
 
