@@ -6,6 +6,14 @@ import tempfile
 from fpdf import FPDF
 import types
 
+# --- ADD: Latin-1 sanitizer for FPDF (minimal, no logic change) ---
+def latin1(s):
+    if s is None:
+        return ""
+    if not isinstance(s, str):
+        s = str(s)
+    return s.encode("latin-1", "replace").decode("latin-1")
+
 # Custom sort list
 custom_pick_order = [
     '1705', '1716', '1717', '1728', '1729', '1740', '1741', '1752', '1753', '1764', '1765', '1776',
@@ -159,35 +167,35 @@ if uploaded_file:
         class PDFTable(FPDF):
             def header(self):
                 self.set_font("Arial", "B", 12)
-                self.cell(0, 10, "Picking Ticket Summary", 0, 1, "C")
+                # sanitize to Latin-1
+                self.cell(0, 10, latin1("Picking Ticket Summary"), 0, 1, "C")
 
             def table(self, data):
                 self.set_font("Arial", "B", 10)
                 col_widths = [30, 80, 40]
                 headers = ["PICK", "Part #", "Qty Committed"]
                 for i, header in enumerate(headers):
-                    self.cell(col_widths[i], 10, header, border=1)
+                    self.cell(col_widths[i], 10, latin1(header), border=1)
                 self.ln()
                 self.set_font("Arial", "", 10)
                 for _, row in data.iterrows():
-                    self.cell(col_widths[0], 10, str(row["PICK"]), border=1)
-                    self.cell(col_widths[1], 10, str(row["Part #"]), border=1)
-                    self.cell(col_widths[2], 10, str(row["Qty Committed"]), border=1)
+                    self.cell(col_widths[0], 10, latin1(str(row["PICK"])), border=1)
+                    self.cell(col_widths[1], 10, latin1(str(row["Part #"])), border=1)
+                    self.cell(col_widths[2], 10, latin1(str(row["Qty Committed"])), border=1)
                     self.ln()
 
         pdf = PDFTable()
 
-        # ADDED: Override header to include Order Number, without changing the class definition
+        # Override header to include Order Number (use ASCII hyphen, sanitize)
         def custom_header(self):
             self.set_font("Arial", "B", 12)
             title = "Picking Ticket Summary"
             if getattr(self, "_order_number", None):
-                title += f" – Order {self._order_number}"
-            self.cell(0, 10, title, 0, 1, "C")
-        pdf._order_number = order_number  # ADDED
-        pdf.header = types.MethodType(custom_header, pdf)  # ADDED
+                title += f" - Order {self._order_number}"  # hyphen, not en dash
+            self.cell(0, 10, latin1(title), 0, 1, "C")
+        pdf._order_number = order_number
+        pdf.header = types.MethodType(custom_header, pdf)
 
-        
         pdf.add_page()
         pdf.table(df)
 
@@ -198,12 +206,3 @@ if uploaded_file:
 
     else:
         st.warning("No valid entries found in the PDF.")
-
-
-
-
-
-
-
-
-
