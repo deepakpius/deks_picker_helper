@@ -133,7 +133,7 @@ if uploaded_file:
 
     def custom_sort_key2(entry):
         try:
-            return custom_pick_order2.index(entry["PICK"])
+            return custom_pick_order_2.index(entry["PICK"])
         except:
             return float('inf')
 
@@ -179,6 +179,7 @@ if uploaded_file:
 
     else:
         st.warning("No valid entries found in the PDF.")
+
 
 
 
